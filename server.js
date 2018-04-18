@@ -4,6 +4,7 @@ const path = require('path')
 const app = express()
 var torrentStream = require('torrent-stream')
 const OS = require('opensubtitles-api');
+var ffmpeg = require('fluent-ffmpeg');
 
 const OpenSubtitles = new OS({
     useragent:'UserAgent',
@@ -13,9 +14,9 @@ const OpenSubtitles = new OS({
 
 app.use(express.static(path.join(__dirname, 'public')))
 
-app.get('/', function(req, res) {
-  res.sendFile(path.join(__dirname + '/index.html'))
-})
+ app.get('/', function(req, res) {
+   res.sendFile(path.join(__dirname + '/index.html'))
+ })
 
 
 
@@ -70,11 +71,29 @@ const range = req.headers.range
   });
 })
 
+app.get('/video2', function(req, res)
+{
+  console.log('doing');
+
+  ffmpeg('./assets/test.avi')
+  .videoCodec('libx264')
+  .audioCodec('libmp3lame')
+  .size('340x260')
+  .on('error', function(err) {
+    console.log('An error occurred: ' + err.message);
+  })
+  .on('end', function() {
+    console.log('Processing finished !');
+  })
+  .save('./assets/test.mp4');
+
+  console.log('done');
+})
 
 
 
 app.get('/video', function(req, res) {
-  const path = 'assets/sample.mp4'
+  const path = 'assets/test.mp4'
   const stat = fs.statSync(path)
 
   const fileSize = stat.size
