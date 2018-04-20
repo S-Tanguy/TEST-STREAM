@@ -5,11 +5,16 @@ const app = express()
 var torrentStream = require('torrent-stream')
 const OS = require('opensubtitles-api');
 var ffmpeg = require('fluent-ffmpeg');
+var StreamBodyParser = require('stream-body-parser');
+var Transcoder = require('stream-transcoder');
 
 const OpenSubtitles = new OS({
     useragent:'UserAgent',
     ssl: true
 });
+
+
+//var bodyParser = new StreamBodyParser(app);
 
 
 app.use(express.static(path.join(__dirname, 'public')))
@@ -20,13 +25,60 @@ app.use(express.static(path.join(__dirname, 'public')))
 
 
 
-app.get('/teststream', function(req, res) {
+app.get('/teststream', async function(req, res) {
 
-var engine = torrentStream('88594AAACBDE40EF3E2510C47374EC0AA396C08E');
+var engine = await torrentStream('4e286d9059a184e40b9d59f47b280268464fd3b9');
 const range = req.headers.range
-
+//console.log(engine)
   engine.on('ready', function() {
   	engine.files.forEach(async function(file) {
+      //console.log(file)
+
+
+
+      ////////////////////// C'EST LA PARTIE OU IL FAUT ENCODER.
+      //////////////////// STREAM EN FONCTION DU PREMIER TELECHARGEMENT
+      //////////////////// ENCODAGE DE LA VIDEO ET Streaming
+      //////////////// PB: ON PEUX PAS AVANCER
+      if (file.name.indexOf('.avi') !== -1){
+        const fileSize  = await file.length
+        const stream = await file.createReadStream()
+
+        const head = await {
+          'Content-Length': fileSize,
+          'Content-Type': 'video/mp4',
+        }
+
+        var toto = await new Transcoder(stream)
+        .videoCodec('h264')
+        .videoBitrate(800 * 1000)
+        .fps(25)
+        .audioCodec('aac')
+        .sampleRate(44100)
+        .channels(2)
+        .audioBitrate(128 * 1000)
+        .format('mp4')
+        .on('finish', function() {
+            next();
+        })
+        .stream(stream).pipe(res);
+        res.writeHead(200, head)
+
+
+      }
+
+
+
+
+
+
+
+
+
+
+////////////////////// C'EST LA PARTIE OU IL FAUT PAS ENCODER.
+//////////////////// STREAM EN FONCTION DU PREMIER TELECHARGEMENT
+
       if (file.name.indexOf('.mp4') !== -1 /*|| file.name.indexOf('.avi') !== -1*/) {
         const fileSize  = await file.length
         console.log(file.length + "\n")
@@ -71,6 +123,15 @@ const range = req.headers.range
   });
 })
 
+
+
+
+
+
+
+
+// C'EST LA PARTIE OU ON CONVERTIE UNE VIDEO QUI EXISTE DEJA
+// C'EST A DIRE DEUXIEME VISIONNAGE OU PLUS
 app.get('/video2', function(req, res)
 {
   console.log('doing');
@@ -91,6 +152,11 @@ app.get('/video2', function(req, res)
 })
 
 
+//C'EST LA PARTIE OU ON REGARDE UNE VIDEO QUI A DEJA ETAIT VU PLUS D'UNE FOIS
+//VU QUE C'EST UNE VIDEO STATIQUE
+
+// IL FAUDRA LA FUSIONNER AVEC LA PARTIE DE CONVERSION SI LA VIDEO N'EST PAS AU BON format
+//JE NE SAIS PAS TROP
 
 app.get('/video', function(req, res) {
   const path = 'assets/test.mp4'
