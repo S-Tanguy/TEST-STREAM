@@ -7,6 +7,10 @@ const OS = require('opensubtitles-api');
 var ffmpeg = require('fluent-ffmpeg');
 var StreamBodyParser = require('stream-body-parser');
 var Transcoder = require('stream-transcoder');
+var TorrentSearchApi = require('torrent-search-api');
+
+var torrentSearch = new TorrentSearchApi();
+torrentSearch.enableProvider('Torrent9');
 
 const OpenSubtitles = new OS({
     useragent:'UserAgent',
@@ -27,14 +31,25 @@ app.use(express.static(path.join(__dirname, 'public')))
 
 app.get('/teststream', async function(req, res) {
 
-var engine = await torrentStream('4e286d9059a184e40b9d59f47b280268464fd3b9');
+
+// Search '1080' in 'Movies' category and limit to 20 results
+torrentSearch.search('the walking dead', 'All', 5)
+     .then(torrents => {
+         console.log(torrents);
+         console.log(torrentSearch.getMagnet(torrents[0]));
+     })
+     .catch(err => {
+         console.log(err);
+     });
+var engine = await torrentStream('4e286d9059a184e40b9d59f47b280268464fd3b9', {path:'./movies'});
 const range = req.headers.range
-//console.log(engine)
+
+
+
+
   engine.on('ready', function() {
   	engine.files.forEach(async function(file) {
       //console.log(file)
-
-
 
       ////////////////////// C'EST LA PARTIE OU IL FAUT ENCODER.
       //////////////////// STREAM EN FONCTION DU PREMIER TELECHARGEMENT
@@ -66,19 +81,8 @@ const range = req.headers.range
 
 
       }
-
-
-
-
-
-
-
-
-
-
 ////////////////////// C'EST LA PARTIE OU IL FAUT PAS ENCODER.
 //////////////////// STREAM EN FONCTION DU PREMIER TELECHARGEMENT
-
       if (file.name.indexOf('.mp4') !== -1 /*|| file.name.indexOf('.avi') !== -1*/) {
         const fileSize  = await file.length
         console.log(file.length + "\n")
@@ -118,9 +122,14 @@ const range = req.headers.range
       //  const range = req.headers.range
     	//	var stream = file.createReadStream(start, end);
     }
-  		// stream is readable stream to containing the file content
+  		//stream is readable stream to containing the file content
   	});
-  });
+  })
+  //.on('idle', ()=>{
+  //  fs.unlink('./movies/[ Torrent9.red ] The.Walking.Dead.S08E16.FiNAL.SUBFRENCH.HDTV.XviD-ZT/The.Walking.Dead.S08E16.FiNAL.SUBFRENCH.HDTV.XviD-ZT.avi');
+  //})
+
+
 })
 
 
@@ -135,19 +144,7 @@ const range = req.headers.range
 app.get('/video2', function(req, res)
 {
   console.log('doing');
-
-  ffmpeg('./assets/test.avi')
-  .videoCodec('libx264')
-  .audioCodec('libmp3lame')
-  .size('340x260')
-  .on('error', function(err) {
-    console.log('An error occurred: ' + err.message);
-  })
-  .on('end', function() {
-    console.log('Processing finished !');
-  })
-  .save('./assets/test.mp4');
-
+  transcodage('./assets/test.avi')
   console.log('done');
 })
 
@@ -192,6 +189,9 @@ app.get('/video', function(req, res) {
     fs.createReadStream(path).pipe(res)
   }
 })
+
+
+
 
 app.listen(3000, function () {
   console.log('Listening on port 3000!')
