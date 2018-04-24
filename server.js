@@ -13,8 +13,10 @@ var torrentSearch = new TorrentSearchApi();
 torrentSearch.enableProvider('Torrent9');
 
 const OpenSubtitles = new OS({
-    useragent:'UserAgent',
-    ssl: true
+  useragent:'TemporaryUserAgent',
+  username: 'aelharim',
+  password: 'password',
+  ssl: true
 });
 
 
@@ -27,25 +29,63 @@ app.use(express.static(path.join(__dirname, 'public')))
    res.sendFile(path.join(__dirname + '/index.html'))
  })
 
+ // Il faut créer une fonction entre le front et le back qui permet de choisir un film
+ // dans les proposition données par la fonction chooseOneMovie.
 
-
-app.get('/teststream', async function(req, res) {
-
-
-// Search '1080' in 'Movies' category and limit to 20 results
-torrentSearch.search('the walking dead', 'All', 5)
+function searchMovie(Movie) {
+  return new Promise(function(resolve, reject) {
+    torrentSearch.search(Movie, 'All', 5)
      .then(torrents => {
-         console.log(torrents);
-         console.log(torrentSearch.getMagnet(torrents[0]));
+       console.log(torrents); // --> Dans l'objet torrents il y'a tout les films trouvés (torrent[0], torrents[1], ...)
+       resolve(torrents[0]); // --> CE FILM EST UNE DONNEE EN DUR MAIS C'EST UNE INFORMATION QUI VIENT DU FRONT ! C'EST LE USER QUI DOIT LE SELECTIONNER DEPUIS l'OBJET TORRENTS QUI EST UN TABLEAU D'OBJETs
+     })
+     .catch(err => {
+       console.log(err);
+       reject(err)
+     });
+   })
+}
+
+function giveDescriptionOfMovie(movie) {
+  return new Promise(function(resolve, reject) {
+    torrentSearch.getTorrentDetails(movie)
+     .then(html => {
+         console.log(html); // --> l'objet html permet d'avoir toute la description du film 'movie'. C'est une description faite en HTML
+         resolve(html);
      })
      .catch(err => {
          console.log(err);
+         reject(err);
      });
-var engine = await torrentStream('4e286d9059a184e40b9d59f47b280268464fd3b9', {path:'./movies'});
-const range = req.headers.range
+  })
+}
 
+function dowloadTorrent(movie) {
+   return new Promise(function(resolve, reject) {
+     torrentSearch.getMagnet(movie) // --> dans l'objets torrents[0] par exemple on accede au magnet pour dowload la video
+      .then(magnet => {
+          console.log(magnet);
+          var engine = torrentStream(magnet, {path:'./movies'}); // --> engine dowload la video
+          resolve(engine);
+      })
+      .catch(err => {
+          console.log(err);
+          reject(err)
+      });
+    })
+}
 
+function dowloadSubtitles(Movie){
+  return new Promise(function (resolve, reject) {
 
+  })
+}
+
+app.get('/teststream', async function(req, res) {
+  const range = req.headers.range
+  var choseMovie = await searchMovie("Game of thrones S01E04");
+  var descriptionMovie = await giveDescriptionOfMovie(choseMovie);
+  var engine = await dowloadTorrent(choseMovie); //
 
   engine.on('ready', function() {
   	engine.files.forEach(async function(file) {
