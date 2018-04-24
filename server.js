@@ -1,13 +1,16 @@
-const express = require('express')
-const fs = require('fs')
-const path = require('path')
-const app = express()
-var torrentStream = require('torrent-stream')
-const OS = require('opensubtitles-api');
-var ffmpeg = require('fluent-ffmpeg');
-var StreamBodyParser = require('stream-body-parser');
-var Transcoder = require('stream-transcoder');
-var TorrentSearchApi = require('torrent-search-api');
+const express = require('express'),
+ fs = require('fs'),
+ path = require('path'),
+ app = express(),
+ torrentStream = require('torrent-stream'),
+ OS = require('opensubtitles-api'),
+ ffmpeg = require('fluent-ffmpeg'),
+ StreamBodyParser = require('stream-body-parser'),
+ Transcoder = require('stream-transcoder'),
+ TorrentSearchApi = require('torrent-search-api'),
+ opensubtitles = require("subtitler"),
+ imdb = require('imdb-api'),
+ MovieDB = require('moviedb')('c0116d807d6617f1817949aca31dd697');
 
 var torrentSearch = new TorrentSearchApi();
 torrentSearch.enableProvider('Torrent9');
@@ -32,12 +35,12 @@ app.use(express.static(path.join(__dirname, 'public')))
  // Il faut créer une fonction entre le front et le back qui permet de choisir un film
  // dans les proposition données par la fonction chooseOneMovie.
 
-function searchMovie(Movie) {
+function searchMovie(movieName) {
   return new Promise(function(resolve, reject) {
-    torrentSearch.search(Movie, 'All', 5)
+    torrentSearch.search(movieName, 'All', 5)
      .then(torrents => {
-       console.log(torrents); // --> Dans l'objet torrents il y'a tout les films trouvés (torrent[0], torrents[1], ...)
-       resolve(torrents[0]); // --> CE FILM EST UNE DONNEE EN DUR MAIS C'EST UNE INFORMATION QUI VIENT DU FRONT ! C'EST LE USER QUI DOIT LE SELECTIONNER DEPUIS l'OBJET TORRENTS QUI EST UN TABLEAU D'OBJETs
+       //console.log(torrents); // --> Dans l'objet torrents il y'a tout les films trouvés (torrent[0], torrents[1], ...)
+       resolve(torrents); // --> CE FILM EST UNE DONNEE EN DUR MAIS C'EST UNE INFORMATION QUI VIENT DU FRONT ! C'EST LE USER QUI DOIT LE SELECTIONNER DEPUIS l'OBJET TORRENTS QUI EST UN TABLEAU D'OBJETs
      })
      .catch(err => {
        console.log(err);
@@ -46,11 +49,21 @@ function searchMovie(Movie) {
    })
 }
 
+
+function selectedMyMovie(movies, idDepuisLeFront) {
+  return new Promise(function(resolve, reject) {
+    if (idDepuisLeFront <= 5 && idDepuisLeFront >= 0)
+      resolve(movies[idDepuisLeFront])
+    else
+      rejected(null)
+   })
+}
+
 function giveDescriptionOfMovie(movie) {
   return new Promise(function(resolve, reject) {
     torrentSearch.getTorrentDetails(movie)
      .then(html => {
-         console.log(html); // --> l'objet html permet d'avoir toute la description du film 'movie'. C'est une description faite en HTML
+         //console.log(html); // --> l'objet html permet d'avoir toute la description du film 'movie'. C'est une description faite en HTML
          resolve(html);
      })
      .catch(err => {
@@ -64,7 +77,7 @@ function dowloadTorrent(movie) {
    return new Promise(function(resolve, reject) {
      torrentSearch.getMagnet(movie) // --> dans l'objets torrents[0] par exemple on accede au magnet pour dowload la video
       .then(magnet => {
-          console.log(magnet);
+          //console.log(magnet);
           var engine = torrentStream(magnet, {path:'./movies'}); // --> engine dowload la video
           resolve(engine);
       })
@@ -75,17 +88,91 @@ function dowloadTorrent(movie) {
     })
 }
 
-function dowloadSubtitles(Movie){
-  return new Promise(function (resolve, reject) {
-
+function get_hash(magnet) {
+  return new Promise(function(resolve, reject){
+    var start = magnet.indexOf("btih:") + 5;
+    var end = magnet.indexOf("&tr=udp");
+    var hash = magnet.substr(start, end-start);
+    resolve(hash);
   })
 }
 
+function subtitles_fr(url, title) {
+  return new Promise((resolve, reject) => {
+        var file =  fs.createWriteStream("./upload/subtitles/"+title+".fr.srt");
+        var request = https.get(url, function(response) {
+          response.pipe(file);
+        });
+        if (request)
+          resolve('dl_fr_ok');
+        else
+          reject('dl_fr_fail');
+  });
+}
+
+
+function subtitles_en(url, title) {
+  return new Promise((resolve, reject) => {
+        var file =  fs.createWriteStream("./upload/subtitles/"+title+".en.srt");
+        var request = https.get(url, function(response) {
+          response.pipe(file);
+        });
+        if (request)
+          resolve('dl_en_ok');
+        else
+          reject('dl_en_fail');
+  });
+}
+
+function dowloadSubtitles(Movie){
+  return new Promise(function (resolve, reject) {
+    MovieDB.searchMovie({ query: Movie }, (err, res) => {
+      console.log(res.results[3].id);
+      get_subtitles(Movie, res.results[1].id)
+    });
+  });
+}
+
+async function get_subtitles(title, id)
+{
+  opensubtitles.api.login()
+  .then(function(tok){
+      var token = tok;
+      // got the auth token
+      opensubtitles.api.searchForTitle(token, 'fre', title).then(async function(result){
+        console.log("dwqdwq" + '0110357')
+        console.log("dwqdwqdqwdqwdq" + title)
+        console.log("COUCOU " + id + "     " + title);
+            OpenSubtitles.search({
+                imdbid: "" + id + ""
+            }).then(async subtitles => {
+              console.log(subtitles.fr);
+              console.log(subtitles.en);
+              if (subtitles.fr)
+              {
+                  await subtitles_fr(subtitles.fr.url,result.title);
+              }
+              if (subtitles.en)
+              {
+                await subtitles_en(subtitles.en.url,result.title);
+              }
+            });
+         });
+  });
+}
+
+
+
 app.get('/teststream', async function(req, res) {
   const range = req.headers.range
-  var choseMovie = await searchMovie("Game of thrones S01E04");
-  var descriptionMovie = await giveDescriptionOfMovie(choseMovie);
-  var engine = await dowloadTorrent(choseMovie); //
+  var MovieName = await "Roi lion";
+  var idDepuisLeFrontMovie = 0// Le nom du film est celui qui est mit dans la barre de recherche !!!!
+  var movies = await searchMovie(MovieName); /////////////////// Search Movie nous donne directement un film delectionne depuis le front il faudrait trouver un lien a faire entre le front et le back avant que il selectionne un film
+  //console.log(movies);
+  var movieSelected = await selectedMyMovie(movies, idDepuisLeFrontMovie);
+  var descriptionMovie = await giveDescriptionOfMovie(movieSelected);
+  var engine = await dowloadTorrent(movieSelected); //
+  var subtitles = dowloadSubtitles(MovieName);
 
   engine.on('ready', function() {
   	engine.files.forEach(async function(file) {
