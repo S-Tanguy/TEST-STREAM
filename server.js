@@ -2,6 +2,8 @@ const express = require('express'),
  fs = require('fs'),
  path = require('path'),
  app = express(),
+ https = require('https'),
+ fetch = require('node-fetch'),
  torrentStream = require('torrent-stream'),
  OS = require('opensubtitles-api'),
  ffmpeg = require('fluent-ffmpeg'),
@@ -14,6 +16,7 @@ const express = require('express'),
 
 var torrentSearch = new TorrentSearchApi();
 torrentSearch.enableProvider('Torrent9');
+
 
 const OpenSubtitles = new OS({
   useragent:'TemporaryUserAgent',
@@ -37,18 +40,21 @@ app.use(express.static(path.join(__dirname, 'public')))
 
 function searchMovie(movieName) {
   return new Promise(function(resolve, reject) {
-    torrentSearch.search(movieName, 'All', 5)
+    torrentSearch.search(['IpTorrents', 'Torrent9'], movieName, 'Movies', 20)
      .then(torrents => {
+       //console.log(torrents)
        //console.log(torrents); // --> Dans l'objet torrents il y'a tout les films trouvés (torrent[0], torrents[1], ...)
        resolve(torrents); // --> CE FILM EST UNE DONNEE EN DUR MAIS C'EST UNE INFORMATION QUI VIENT DU FRONT ! C'EST LE USER QUI DOIT LE SELECTIONNER DEPUIS l'OBJET TORRENTS QUI EST UN TABLEAU D'OBJETs
      })
      .catch(err => {
-       console.log(err);
        reject(err)
      });
    })
 }
 
+// fetch('https://api.themoviedb.org/3/movie/76341?api_key=c0116d807d6617f1817949aca31dd697')
+//     .then(res => res.json())
+//     .then(json => console.log(json));
 
 function selectedMyMovie(movies, idDepuisLeFront) {
   return new Promise(function(resolve, reject) {
@@ -63,11 +69,10 @@ function giveDescriptionOfMovie(movie) {
   return new Promise(function(resolve, reject) {
     torrentSearch.getTorrentDetails(movie)
      .then(html => {
-         //console.log(html); // --> l'objet html permet d'avoir toute la description du film 'movie'. C'est une description faite en HTML
+      //   console.log(html); // --> l'objet html permet d'avoir toute la description du film 'movie'. C'est une description faite en HTML
          resolve(html);
      })
      .catch(err => {
-         console.log(err);
          reject(err);
      });
   })
@@ -82,20 +87,20 @@ function dowloadTorrent(movie) {
           resolve(engine);
       })
       .catch(err => {
-          console.log(err);
+        //  console.log(err);
           reject(err)
       });
     })
 }
 
-function get_hash(magnet) {
-  return new Promise(function(resolve, reject){
-    var start = magnet.indexOf("btih:") + 5;
-    var end = magnet.indexOf("&tr=udp");
-    var hash = magnet.substr(start, end-start);
-    resolve(hash);
-  })
-}
+// function get_hash(magnet) {
+//   return new Promise(function(resolve, reject){
+//     var start = magnet.indexOf("btih:") + 5;
+//     var end = magnet.indexOf("&tr=udp");
+//     var hash = magnet.substr(start, end-start);
+//     resolve(hash);
+//   })
+// }
 
 function subtitles_fr(url, title) {
   return new Promise((resolve, reject) => {
@@ -124,55 +129,115 @@ function subtitles_en(url, title) {
   });
 }
 
-function dowloadSubtitles(Movie){
+
+function selectBestImdb(MovieName){
   return new Promise(function (resolve, reject) {
-    MovieDB.searchMovie({ query: Movie }, (err, res) => {
-      console.log(res.results[3].id);
-      get_subtitles(Movie, res.results[1].id)
+    MovieDB.searchMovie({query: MovieName}, (err, resu) => {
+      if (resu.total_results > 0) {
+        console.log(resu)
+        var bestMovie = resu.results[0];
+        var vote_count = resu.results[0].vote_count;
+        resu.results.forEach(function (movie){
+        //  console.log(movie.vote_count)
+        //  console.log(vote_count)
+          if (movie.vote_count > vote_count)
+          {
+            vote_count = movie.vote_count
+            bestMovie = movie
+          }
+        })
+        resolve(bestMovie);
+      }
+      else
+        rejected(null)
+     });
+  });
+}
+
+function takeTheImdb(obj){
+  return new Promise(function (resolve, reject) {
+    MovieDB.movieInfo({id: obj.id}, (err, res) => {
+      if (res.imdb_id)
+        resolve(res.imdb_id)
+      else
+        rejected(null)
     });
   });
 }
 
-async function get_subtitles(title, id)
+
+//
+// async function get_subtitles(title, id)
+// {
+//   opensubtitles.api.login()
+//   .then(function(tok){
+//       var token = tok;
+//       // got the auth token
+//       opensubtitles.api.searchForTitle(token, 'fre', title).then(async function(result){
+//         console.log("dwqdwq" + id)
+//         console.log("dwqdwqdqwdqwdq" + title)
+//         console.log("COUCOU " + id + "     " + title);
+//             OpenSubtitles.search({
+//                 imdbid: "" + id + ""
+//             }).then(async subtitles => {
+//               console.log(subtitles.fr);
+//               console.log(subtitles.en);
+//               if (subtitles.fr)
+//               {
+//                   await subtitles_fr(subtitles.fr.url,result.title);
+//               }
+//               if (subtitles.en)
+//               {
+//                   await subtitles_en(subtitles.en.url,result.title);
+//               }
+//             });
+//          });
+//   });
+// }
+
+
+async function get_subtitles(MovieName)
 {
+  var bestImdb = await selectBestImdb(MovieName)
+  var Imdb = await takeTheImdb(bestImdb);
   opensubtitles.api.login()
-  .then(function(tok){
-      var token = tok;
-      // got the auth token
-      opensubtitles.api.searchForTitle(token, 'fre', title).then(async function(result){
-        console.log("dwqdwq" + '0110357')
-        console.log("dwqdwqdqwdqwdq" + title)
-        console.log("COUCOU " + id + "     " + title);
-            OpenSubtitles.search({
-                imdbid: "" + id + ""
-            }).then(async subtitles => {
-              console.log(subtitles.fr);
-              console.log(subtitles.en);
-              if (subtitles.fr)
-              {
-                  await subtitles_fr(subtitles.fr.url,result.title);
-              }
-              if (subtitles.en)
-              {
-                await subtitles_en(subtitles.en.url,result.title);
-              }
-            });
-         });
-  });
+    .then(function(tok){
+        var token = tok;
+        // got the auth token
+              OpenSubtitles.search({
+                  imdbid: Imdb
+              }).then(async subtitles => {
+            //    console.log(subtitles.fr);
+            //    console.log(subtitles.en);
+                if (subtitles.fr)
+                {
+                    await subtitles_fr(subtitles.fr.url,MovieName);
+                }
+                if (subtitles.en)
+                {
+                    await subtitles_en(subtitles.en.url,MovieName);
+                }
+              });
+    });
 }
+
+
 
 
 
 app.get('/teststream', async function(req, res) {
   const range = req.headers.range
-  var MovieName = await "Roi lion";
+  var MovieName = await "Mad Max: Fury Road";
   var idDepuisLeFrontMovie = 0// Le nom du film est celui qui est mit dans la barre de recherche !!!!
   var movies = await searchMovie(MovieName); /////////////////// Search Movie nous donne directement un film delectionne depuis le front il faudrait trouver un lien a faire entre le front et le back avant que il selectionne un film
   //console.log(movies);
   var movieSelected = await selectedMyMovie(movies, idDepuisLeFrontMovie);
   var descriptionMovie = await giveDescriptionOfMovie(movieSelected);
-  var engine = await dowloadTorrent(movieSelected); //
-  var subtitles = dowloadSubtitles(MovieName);
+  var engine = await dowloadTorrent(movieSelected);
+  var test = await get_subtitles(MovieName)
+
+  //console.log(test);
+  //var subtitles = dowloadSubtitles(MovieName);
 
   engine.on('ready', function() {
   	engine.files.forEach(async function(file) {
@@ -182,7 +247,7 @@ app.get('/teststream', async function(req, res) {
       //////////////////// STREAM EN FONCTION DU PREMIER TELECHARGEMENT
       //////////////////// ENCODAGE DE LA VIDEO ET Streaming
       //////////////// PB: ON PEUX PAS AVANCER
-      if (file.name.indexOf('.avi') !== -1){
+      if (file.name.indexOf('.avi') !== -1 || file.name.indexOf('.flv') !== -1 || file.name.indexOf('.mkv') !== -1){
         const fileSize  = await file.length
         const stream = await file.createReadStream()
 
