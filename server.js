@@ -12,6 +12,7 @@ const express = require('express'),
  TorrentSearchApi = require('torrent-search-api'),
  opensubtitles = require("subtitler"),
  imdb = require('imdb-api'),
+ srt2vtt = require('srt-to-vtt'),
  MovieDB = require('moviedb')('c0116d807d6617f1817949aca31dd697');
 
 var torrentSearch = new TorrentSearchApi();
@@ -26,57 +27,47 @@ const OpenSubtitles = new OS({
 });
 
 
-//var bodyParser = new StreamBodyParser(app);
-
-
 app.use(express.static(path.join(__dirname, 'public')))
 
  app.get('/', function(req, res) {
    res.sendFile(path.join(__dirname + '/index.html'))
  })
 
- // Il faut créer une fonction entre le front et le back qui permet de choisir un film
- // dans les proposition données par la fonction chooseOneMovie.
-
-function searchMovie(movieName) {
-  return new Promise(function(resolve, reject) {
-    torrentSearch.search(['IpTorrents', 'Torrent9'], movieName, 'Movies', 20)
-     .then(torrents => {
-       //console.log(torrents)
-       //console.log(torrents); // --> Dans l'objet torrents il y'a tout les films trouvés (torrent[0], torrents[1], ...)
-       resolve(torrents); // --> CE FILM EST UNE DONNEE EN DUR MAIS C'EST UNE INFORMATION QUI VIENT DU FRONT ! C'EST LE USER QUI DOIT LE SELECTIONNER DEPUIS l'OBJET TORRENTS QUI EST UN TABLEAU D'OBJETs
-     })
-     .catch(err => {
-       reject(err)
-     });
-   })
-}
-
-// fetch('https://api.themoviedb.org/3/movie/76341?api_key=c0116d807d6617f1817949aca31dd697')
-//     .then(res => res.json())
-//     .then(json => console.log(json));
-
-function selectedMyMovie(movies, idDepuisLeFront) {
-  return new Promise(function(resolve, reject) {
-    if (idDepuisLeFront <= 5 && idDepuisLeFront >= 0)
-      resolve(movies[idDepuisLeFront])
-    else
-      rejected(null)
-   })
-}
-
-function giveDescriptionOfMovie(movie) {
-  return new Promise(function(resolve, reject) {
-    torrentSearch.getTorrentDetails(movie)
-     .then(html => {
-      //   console.log(html); // --> l'objet html permet d'avoir toute la description du film 'movie'. C'est une description faite en HTML
-         resolve(html);
-     })
-     .catch(err => {
-         reject(err);
-     });
+function searchMoviesByName(movieName, language) {
+  return new Promise(async function(resolve, reject) {
+    fetch('https://api.themoviedb.org/3/search/movie?api_key=c0116d807d6617f1817949aca31dd697&query=' + movieName + '&language=' + language)
+      .then(res => res.json())
+      .then(json => {
+        resolve(json)
+    });
   })
 }
+
+function giveDescritpionMovie(id, language) {
+  return new Promise(function(resolve, reject) {
+    fetch('https://api.themoviedb.org/3/movie/' + id + '?api_key=c0116d807d6617f1817949aca31dd697&language=' + language)
+      .then(res => res.json())
+      .then(json => {
+        resolve(json)
+    });
+   })
+}
+
+function searchTorrentForMovie(nameMovieFromFront) {
+  return new Promise(function(resolve, reject) {
+    console.log(nameMovieFromFront)
+    torrentSearch.search(['IpTorrents', 'Torrent9'], nameMovieFromFront, 'Movies', 20)
+      .then(torrents => {
+        //console.log(torrents[0])
+        resolve(torrents[0]);
+      })
+      .catch(err => {
+        reject(err)
+      });
+   })
+}
+
+
 
 function dowloadTorrent(movie) {
    return new Promise(function(resolve, reject) {
@@ -93,15 +84,6 @@ function dowloadTorrent(movie) {
     })
 }
 
-// function get_hash(magnet) {
-//   return new Promise(function(resolve, reject){
-//     var start = magnet.indexOf("btih:") + 5;
-//     var end = magnet.indexOf("&tr=udp");
-//     var hash = magnet.substr(start, end-start);
-//     resolve(hash);
-//   })
-// }
-
 function subtitles_fr(url, title) {
   return new Promise((resolve, reject) => {
         var file =  fs.createWriteStream("./upload/subtitles/"+title+".fr.srt");
@@ -109,7 +91,7 @@ function subtitles_fr(url, title) {
           response.pipe(file);
         });
         if (request)
-          resolve('dl_fr_ok');
+          resolve("./upload/subtitles/"+title+".fr.srt");
         else
           reject('dl_fr_fail');
   });
@@ -123,83 +105,14 @@ function subtitles_en(url, title) {
           response.pipe(file);
         });
         if (request)
-          resolve('dl_en_ok');
+          resolve("./upload/subtitles/"+title+".en.srt");
         else
           reject('dl_en_fail');
   });
 }
 
-
-function selectBestImdb(MovieName){
-  return new Promise(function (resolve, reject) {
-    MovieDB.searchMovie({query: MovieName}, (err, resu) => {
-      if (resu.total_results > 0) {
-        console.log(resu)
-        var bestMovie = resu.results[0];
-        var vote_count = resu.results[0].vote_count;
-        resu.results.forEach(function (movie){
-        //  console.log(movie.vote_count)
-        //  console.log(vote_count)
-          if (movie.vote_count > vote_count)
-          {
-            vote_count = movie.vote_count
-            bestMovie = movie
-          }
-        })
-        resolve(bestMovie);
-      }
-      else
-        rejected(null)
-     });
-  });
-}
-
-function takeTheImdb(obj){
-  return new Promise(function (resolve, reject) {
-    MovieDB.movieInfo({id: obj.id}, (err, res) => {
-      if (res.imdb_id)
-        resolve(res.imdb_id)
-      else
-        rejected(null)
-    });
-  });
-}
-
-
-//
-// async function get_subtitles(title, id)
-// {
-//   opensubtitles.api.login()
-//   .then(function(tok){
-//       var token = tok;
-//       // got the auth token
-//       opensubtitles.api.searchForTitle(token, 'fre', title).then(async function(result){
-//         console.log("dwqdwq" + id)
-//         console.log("dwqdwqdqwdqwdq" + title)
-//         console.log("COUCOU " + id + "     " + title);
-//             OpenSubtitles.search({
-//                 imdbid: "" + id + ""
-//             }).then(async subtitles => {
-//               console.log(subtitles.fr);
-//               console.log(subtitles.en);
-//               if (subtitles.fr)
-//               {
-//                   await subtitles_fr(subtitles.fr.url,result.title);
-//               }
-//               if (subtitles.en)
-//               {
-//                   await subtitles_en(subtitles.en.url,result.title);
-//               }
-//             });
-//          });
-//   });
-// }
-
-
-async function get_subtitles(MovieName)
+async function get_subtitles(Imdb, movieName)
 {
-  var bestImdb = await selectBestImdb(MovieName)
-  var Imdb = await takeTheImdb(bestImdb);
   opensubtitles.api.login()
     .then(function(tok){
         var token = tok;
@@ -211,33 +124,38 @@ async function get_subtitles(MovieName)
             //    console.log(subtitles.en);
                 if (subtitles.fr)
                 {
-                    await subtitles_fr(subtitles.fr.url,MovieName);
+                    await subtitles_fr(subtitles.fr.url, movieName);
                 }
                 if (subtitles.en)
                 {
-                    await subtitles_en(subtitles.en.url,MovieName);
+                    await subtitles_en(subtitles.en.url, movieName);
                 }
               });
     });
 }
 
-
-
-
-
 app.get('/teststream', async function(req, res) {
   const range = req.headers.range
-  var MovieName = await "Mad Max: Fury Road";
-  var idDepuisLeFrontMovie = 0// Le nom du film est celui qui est mit dans la barre de recherche !!!!
-  var movies = await searchMovie(MovieName); /////////////////// Search Movie nous donne directement un film delectionne depuis le front il faudrait trouver un lien a faire entre le front et le back avant que il selectionne un film
-  //console.log(movies);
-  var movieSelected = await selectedMyMovie(movies, idDepuisLeFrontMovie);
-  var descriptionMovie = await giveDescriptionOfMovie(movieSelected);
-  var engine = await dowloadTorrent(movieSelected);
-  var test = await get_subtitles(MovieName)
+  var MovieName = await "Le Roi Lion";
+  var language = 'fr-FR'; ///////// C'est le front qui donne cette donnee ou "en-EN"
 
-  //console.log(test);
-  //var subtitles = dowloadSubtitles(MovieName);
+  var movies = await searchMoviesByName(MovieName, language);
+  //console.log(movies);
+
+  var movie_selected_id = 8587; ///////// C'est le front qui fournit l'id
+  var movie_selected = await giveDescritpionMovie(movie_selected_id, language);
+  //console.log(movie_selected);
+
+  var nameMovieFromFront = movie_selected.title;
+  //console.log(nameMovieFromFront)
+  var torrent = await searchTorrentForMovie(nameMovieFromFront);
+  //console.log(torrent)
+
+
+  //var descriptionMovie = await giveDescriptionOfMovie(movieSelected);
+  var engine = await dowloadTorrent(torrent);
+
+  var subtitles = await get_subtitles(movie_selected.imdb_id, nameMovieFromFront)
 
   engine.on('ready', function() {
   	engine.files.forEach(async function(file) {
