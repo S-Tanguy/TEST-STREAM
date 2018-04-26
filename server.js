@@ -12,7 +12,7 @@ const express = require('express'),
  TorrentSearchApi = require('torrent-search-api'),
  opensubtitles = require("subtitler"),
  imdb = require('imdb-api'),
- srt2vtt = require('srt-to-vtt'),
+ srt2vtt = require('srt2vtt'),
  MovieDB = require('moviedb')('c0116d807d6617f1817949aca31dd697');
 
 var torrentSearch = new TorrentSearchApi();
@@ -172,10 +172,10 @@ function subtitles_fr(url, title) {
         var file =  fs.createWriteStream("./upload/subtitles/"+title+".fr.srt");
         var request = https.get(url, function(response) {
           response.pipe(file);
+          file.on('finish', function(){
+            convert_srtfr(title);
+          })
         });
-        file.on('finish', function(){
-          convert_srtfr(title);
-        })
         if (request)
           resolve("./upload/subtitles/"+title+".fr.srt");
         else
@@ -206,10 +206,10 @@ function subtitles_en(url, title) {
         var file =  fs.createWriteStream("./upload/subtitles/"+title+".en.srt");
         var request = https.get(url, function(response) {
           response.pipe(file);
+          file.on('finish', function(){
+            convert_srten(title);
+          })
         });
-        file.on('finish', function(){
-          convert_srten(title);
-        })
         if (request)
           resolve("./upload/subtitles/"+title+".en.srt");
         else
@@ -221,7 +221,6 @@ function convert_srten(title)
 {
   var path = "./upload/subtitles/"+title+".en.srt";
   var dest = "./upload/subtitles/"+title+".en.vtt";
-
   const srtData = fs.readFileSync(path);
   srt2vtt(srtData, (err, vttData) => {
     if (err) connsole.log("erreur conversion en srt to vtt" + err)
