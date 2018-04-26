@@ -35,7 +35,7 @@ app.use(express.static(path.join(__dirname, 'public')))
 
 function searchMoviesByName(movieName, language) {
   return new Promise(async function(resolve, reject) {
-    fetch('https://api.themoviedb.org/3/search/movie?api_key=c0116d807d6617f1817949aca31dd697&query=' + movieName + '&language=' + language)
+    fetch('https://api.themoviedb.org/3/search/movie?api_key=c0116d807d6617f1817949aca31dd697&primary_release_date.gte=1970&query=' + movieName + '&language=' + language)
       .then(res => res.json())
       .then(json => {
         resolve(json)
@@ -45,7 +45,7 @@ function searchMoviesByName(movieName, language) {
 
 function searchMoviesByPopularity(language, page){
   return new Promise(function(resolve, reject) {
-    fetch('https://api.themoviedb.org/3/discover/movie?sort_by=popularity.desc&api_key=c0116d807d6617f1817949aca31dd697&language=' + language + '&page=' + page)
+    fetch('https://api.themoviedb.org/3/discover/movie?sort_by=popularity.desc&api_key=c0116d807d6617f1817949aca31dd697&primary_release_date.gte=1970&language=' + language + '&page=' + page)
       .then(res => res.json())
       .then(json => {
         resolve(json);
@@ -76,7 +76,7 @@ function searchMoviesBetweenDateAndListByPopularityAsc(language, page, start, en
 
 function searchMoviesBetweenRateAndListByPopularityDesc(language, page, start, end){
   return new Promise(function(resolve, reject) {
-    fetch('https://api.themoviedb.org/3/discover/movie?api_key=c0116d807d6617f1817949aca31dd697&sort_by=popularity.desc&vote_average.gte=' + start +'&vote_average.lte=' + end + '&page=' + page + '&language=' + language)
+    fetch('https://api.themoviedb.org/3/discover/movie?api_key=c0116d807d6617f1817949aca31dd697&primary_release_date.gte=1970&sort_by=popularity.desc&vote_average.gte=' + start +'&vote_average.lte=' + end + '&page=' + page + '&language=' + language)
       .then(res => res.json())
       .then(json => {
         resolve(json);
@@ -86,7 +86,7 @@ function searchMoviesBetweenRateAndListByPopularityDesc(language, page, start, e
 
 function searchMoviesBetweenRateAndListByPopularityAsc(language, page, start, end){
   return new Promise(function(resolve, reject) {
-    fetch('https://api.themoviedb.org/3/discover/movie?api_key=c0116d807d6617f1817949aca31dd697&sort_by=popularity.asc&vote_average.gte=' + start +'&vote_average.lte=' + end + '&page=' + page + '&language=' + language)
+    fetch('https://api.themoviedb.org/3/discover/movie?api_key=c0116d807d6617f1817949aca31dd697&primary_release_date.gte=1970&sort_by=popularity.asc&vote_average.gte=' + start +'&vote_average.lte=' + end + '&page=' + page + '&language=' + language)
       .then(res => res.json())
       .then(json => {
         resolve(json);
@@ -96,7 +96,7 @@ function searchMoviesBetweenRateAndListByPopularityAsc(language, page, start, en
 
 function searchMoviesInGenreAndListByPopularityDesc(language, id, page){
   return new Promise(function(resolve, reject) {
-    fetch('https://api.themoviedb.org/3/discover/movie?api_key=c0116d807d6617f1817949aca31dd697&with_genres=' + id + '&sort_by=popularity.desc&page=' + page + '&language=' + language)
+    fetch('https://api.themoviedb.org/3/discover/movie?api_key=c0116d807d6617f1817949aca31dd697&primary_release_date.gte=1970&with_genres=' + id + '&sort_by=popularity.desc&page=' + page + '&language=' + language)
       .then(res => res.json())
       .then(json => {
         resolve(json);
@@ -106,7 +106,7 @@ function searchMoviesInGenreAndListByPopularityDesc(language, id, page){
 
 function searchMoviesInGenreAndListByPopularityAsc(language, id, page){
   return new Promise(function(resolve, reject) {
-    fetch('https://api.themoviedb.org/3/discover/movie?api_key=c0116d807d6617f1817949aca31dd697&with_genres=' + id + '&sort_by=popularity.asc&page=' + page + '&language=' + language)
+    fetch('https://api.themoviedb.org/3/discover/movie?api_key=c0116d807d6617f1817949aca31dd697&primary_release_date.gte=1970&with_genres=' + id + '&sort_by=popularity.asc&page=' + page + '&language=' + language)
       .then(res => res.json())
       .then(json => {
         resolve(json);
@@ -173,6 +173,9 @@ function subtitles_fr(url, title) {
         var request = https.get(url, function(response) {
           response.pipe(file);
         });
+        file.on('finish', function(){
+          convert_srtfr(title);
+        })
         if (request)
           resolve("./upload/subtitles/"+title+".fr.srt");
         else
@@ -190,9 +193,9 @@ function convert_srtfr(title)
     if (err) connsole.log("erreur conversion fr srt to vtt" + err)
     else {
       fs.writeFileSync(dest, vttData);
-      // fs.unlink(path, (err) => {
-      //   if (err) console.log("erreur 2 fr srt to vtt " + err)
-      //  })
+      fs.unlink(path, (err) => {
+        if (err) console.log("erreur 2 fr srt to vtt " + err)
+       })
       }
 })
 }
@@ -204,6 +207,9 @@ function subtitles_en(url, title) {
         var request = https.get(url, function(response) {
           response.pipe(file);
         });
+        file.on('finish', function(){
+          convert_srten(title);
+        })
         if (request)
           resolve("./upload/subtitles/"+title+".en.srt");
         else
@@ -221,9 +227,9 @@ function convert_srten(title)
     if (err) connsole.log("erreur conversion en srt to vtt" + err)
     else {
       fs.writeFileSync(dest, vttData);
-      // fs.unlink(path, (err) => {
-      //   if (err) console.log("erreur 2 en srt to vtt " + err)
-      //  })
+      fs.unlink(path, (err) => {
+        if (err) console.log("erreur 2 en srt to vtt " + err)
+       })
       }
 })
 }
@@ -253,17 +259,18 @@ async function get_subtitles(Imdb, movieName)
 
 app.get('/teststream', async function(req, res) {
   const range = req.headers.range
-  var MovieName = await "Le Roi Lion";
+  var MovieName = await "Roi Lion";
   var language = 'fr-FR'; ///////// C'est le front qui donne cette donnee ou "en-EN"
 
   var movies = await searchMoviesByName(MovieName, language);
   //console.log(movies);
 
-  var movie_selected_id = 8587; ///////// C'est le front qui fournit l'id
+  var movie_selected_id = 120; ///////// C'est le front qui fournit l'id
   var movie_selected = await giveDescritpionMovie(movie_selected_id, language);
   //console.log(movie_selected);
 
-  var nameMovieFromFront = movie_selected.title;
+  var nameMovieFromFront = movie_selected.title + " " + parseInt(movie_selected.release_date);
+
   //console.log(nameMovieFromFront)
   var torrent = await searchTorrentForMovie(nameMovieFromFront);
   //console.log(torrent)
